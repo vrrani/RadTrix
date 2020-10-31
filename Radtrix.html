@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Visualizing Radtrix</title>
+  <meta charset="utf-8">
+  <link href="http://fonts.googleapis.com/css?family=Sintony|Dancing+Script:900" rel="stylesheet" type="text/css" />
+  <link rel="stylesheet", href="styles.css">
+  <script src="http://d3js.org/d3.v4.min.js"></script>
+
+</head>
+<body>
+  <div class="container">
+    <graph></graph>
+    <script>
+
+      function radiansToDegrees(radians) { return (radians / Math.PI) * 180; }
+
+      function radiansToX(radians) { return Math.sin(radians) * radius; }
+
+      function radiansToY(radians) { return Math.cos(radians) * -radius; }
+
+  // function capitalize_Words(str) { return str.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();}); }
+
+  //For Matrix
+  var margin = { top: 200, right: 200, bottom: 200, left: 200 }, width = 100, height = 100;
+  // For Circles
+  var radius = 250, Cmargin = 50, outerRadius = radius + Cmargin;
+  var count = 0;
+
+  d3.json("data1.json", function(data) {
+    //----------------------------Matrix Code------------------------------------------------//
+    var svg = d3.select('body').append('svg');
+    var matrixAttributes = svg.attr("width", width + margin.left + margin.right )
+    .attr("height", height + margin.top + margin.bottom )
+    .append("g")
+    .attr("transform", "translate(" + radius + "," + radius + ")");
+
+    matrixAttributes.append("rect").attr("class", "background").attr("width", width).attr("height", height);
+
+    var matrix = [];
+    var nodes = data.nodes;
+    var dict = [];
+    var total_items = nodes.length;
+
+    var matrixScale = d3.scaleBand().range([0, width]).domain(d3.range(total_items));
+    var opacityScale = d3.scaleLinear().domain([0, data.circlenodes.length]).range([0.05, 1.0]).clamp(true);
+    var opacityScale1 = d3.scaleLinear().domain([0 , data.circlenodes.length*2]).range([0.05, 1.0]).clamp(true);
+    var colorScale = d3.scaleOrdinal(d3.schemeCategory20b);
+
+
+    nodes.forEach(function(node) {
+      node.count = 0;
+      matrix[node.index] = d3.range(total_items).map(item_index => {
+        return {
+          x: item_index,
+          y: node.index,
+          z: 0
+        };
+      });});
+
+    data.links.forEach(function(link) {
+      matrix[link.source][link.target].z += link.value;
+      matrix[link.target][link.source].z += link.value;
+      nodes[link.source].count += link.value;
+      nodes[link.target].count += link.value;
+    });
+
+    var rows = matrixAttributes.selectAll(".row")
+    .data(matrix)
+    .enter().append("g")
+    .attr("class", "row")
+    .attr("transform", (d, i) => { return "translate(0," + matrixScale(i) + ")"; });
+
+
+    var squares = rows.selectAll(".cell")
+    .data(d => d.filter(item => item.z > 0))
+    .enter().append("rect")
+    .attr("class", "cell")
+    .attr("x", d => matrixScale(d.x))
+    .attr("width", matrixScale.bandwidth())
+    .attr("height", matrixScale.bandwidth())
+    .attr("id", function(d, i){
+      return nodes[i].name;
+    })
+    .style("fill-opacity", function(d){
+                    if(d.x == d.y){
+                      return opacityScale1(d.z);
+                    }
+                    else{
+                      return opacityScale(d.z);
+                    }
+      })
+      .style("fill", d => {
+            if(d.x == d.y){
+              return "green";//colorScale(7);
+            }
+            else{
+              return colorScale(1);
+            }
+
+      })
+    // .style("fill-opacity", d => opacityScale(d.z))
+    // .style("fill", d => {
+    //   return nodes[d.x].group == nodes[d.y].group ? colorScale((nodes[d.x].indes)+1) : "grey"; })
+    .on("mouseover", mouseoverRows)
+    .on("mouseout", mouseoutRows);
+
+    var columns = matrixAttributes.selectAll(".column")
+    .data(matrix)
+    .enter().append("g")
+    .attr("class", "column")
+    .attr("transform", (d, i) => {
+      return "translate(" + matrixScale(i) + ")rotate(-90)";  });
+
+
+    rows.append("text")
+    .attr("class", "label")
+    .attr("x", -5)
+    .attr("y", matrixScale.bandwidth() / 2)
+    .attr("dy", ".32em")
+    .attr("text-anchor", "end")
+    .text((d, i) => (nodes[i].name));
+
+    columns.append("text")
+    .attr("class", "label")
+    .attr("y", 100)
+    .attr("y", matrixScale.bandwidth() / 2)
+    .attr("dy", ".32em")
+    .attr("text-anchor", "start")
+    .text((d, i) => nodes[i].name);
+
+    // Precompute the orders.
+    var orders = {
+      name: d3.range(total_items).sort((a, b) => {
+        return d3.ascending(nodes[a].name, nodes[b].name);
+      }),
+      count: d3.range(total_items).sort((a, b) => {
+        return nodes[b].count - nodes[a].count;
+      }),
+      group: d3.range(total_items).sort((a, b) => {
+        return nodes[b].group - nodes[a].group;
+      })};
+
+      rows.append("line").attr("x2", width);
+
+      columns.append("line").attr("x1", -width);
+
+      var tooltip = d3.select("body")
+      .append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+
+    //---------------------Circle  Code-----------------------------------------//
+    var CircleNodes = data.circlenodes;
+    var CircleEdges = data.circleedges;
+    var numNodes = CircleNodes.length;
+    var range = Math.PI * 2;
+    var radianSeparation = range / numNodes;
+    var halfSeparation = radianSeparation / 2;
+
+
+    var circleAttributes = svg.attr('width', outerRadius * 2)
+    .attr('height', outerRadius * 2)
+    .append('g')
+    .attr('transform', 'translate(' + outerRadius + ', ' + outerRadius + ')');
+
+  // draw main circle
+  circleAttributes.append('circle')
+  .classed('main-circle', true)
+  // .attr('r', radius);
+
+  // draw circles
+  circleAttributes.selectAll('circle.node')
+  .data(CircleNodes)
+  .enter()
+  .append('circle')
+  .classed('node', true)
+  // .attr('r', 5)
+  .attr('cx', function (d, i) {
+    d.radians = i * radianSeparation;
+    d.degrees = radiansToDegrees(d.radians);
+          // set x and y based on radians and radius
+          d.x = radiansToX(d.radians);
+          return d.x;
+        })
+  .attr('cy', function (d, i) {
+    d.radians = i * radianSeparation;
+    d.degrees = radiansToDegrees(d.radians);
+    d.y = radiansToY(d.radians);
+    return d.y;
+  })
+  .attr("degree", function(d){
+    return d.degrees;
+  })
+  .attr("id", function(d, i){
+    return d.name;
+  })
+  .attr("nodeDegree", function(d,i){
+      count = 0;
+
+      CircleEdges.forEach(function(edgex){
+        if(edgex.source == d.name){
+          count += 1;
+      }
+      })
+      di = {};
+      di[d.name] = count;
+      dict.push(di);
+   return count;
+  })
+  .on("mouseover", mouseoverCircle)
+  .on("mouseout", mouseoutRows)
+  // .attr('r', 5);
+  .attr('r', function(d, i){
+    var radI = 3;
+    dict.forEach(function(dValue){
+      var nodeName = Object.keys(dValue)[0];
+      if(nodeName == d.name){
+        var checkVal1 =  (20*total_items)/100;
+        var checkVal2 =  (80*total_items)/100;
+        if (dValue[nodeName] <= checkVal1){
+          radI = checkVal1
+        }
+        else if(dValue[nodeName] > checkVal2){
+          radI = checkVal2
+        }
+        else{
+          radI = total_items/2
+        }
+      }
+    })
+    return (2*radI);
+ });
+
+  circleAttributes.selectAll('text')
+    .data(CircleNodes)
+    .enter()
+    .append('text')
+    .attr("text-anchor", function(d){
+      return (Math.sin(d.radians) < 0) ? 'end' : 'begin';
+    })
+    .attr("dy", '0.3em')
+    .attr("dx", function(d) {
+      return (Math.sin(d.radians) < 0) ? '-1em' : '1em';
+    })
+    .attr("transform", function(d){
+      var degrees = d.degrees - 90;
+      var xTranslate = radius;
+      if (Math.sin(d.radians) < 0) {
+        degrees -= 180;
+        xTranslate *= -1;
+      }
+      return 'rotate(' + degrees + ') translate(' + xTranslate + ', 0)';
+    })
+    .text(function(d) {
+      return d.name;
+    })
+    .attr("font-size", "10px");
+    //.classed('node', true);
+  //-----------------------Line Code----------------------------------------------//
+  var linesAttribute = svg.append('g');
+  // var getIndex = {'Breast' : 1, "Colon": 2, "GBM": 3, "Kidney": 4, "Lung":5};
+  var getIndex = {'Breast' : 2, "Colon": 1, "GBM": 3, "Kidney": 0, "Lung": 4};
+  var color = {0 : "#33FFFF", 1: "#bf812d", 2: "#CC0099", 3: "#33a02c", 4: "#d6604d"};
+  linesAttribute.selectAll("line")
+      .data(CircleEdges)
+      .enter()
+      .append("line")
+      .style("stroke-width", "0.6")
+      .style("stroke", function(d){
+        try{
+          var tragetName = document.getElementById(d.target).id;
+          var idxValue = getIndex[tragetName];
+          return color[idxValue];
+        }catch(e){
+                          // console.log("Error in stroke: ",e);
+                          count += 1;
+                        }
+                      })
+      .attr("x1", function(d,i){
+        return (document.getElementById(d.source).cx.baseVal.value) + outerRadius; })
+      .attr("y1", function(d,i){
+        return (document.getElementById(d.source).cy.baseVal.value) + outerRadius; })
+      .attr("x2", function(d,i){
+        try{
+          var checkDegree =  document.getElementById(d.source).attributes.degree.nodeValue;
+                            // console.log(document.getElementById(d.target));
+                            var x2 = document.getElementById(d.target).x.baseVal.value + radius;
+                            var tragetName = document.getElementById(d.target).id;
+                            var idxValue = getIndex[tragetName];
+
+							console.log("tragetName :",tragetName);
+							console.log("val :",idxValue);
+          					console.log("checkDegree :",checkDegree);
+
+                            if(checkDegree > 225 && checkDegree <= 305){
+                            	console.log("val :",idxValue);
+                                return (x2 - (20 * idxValue)); // Left
+                              }
+                              else if(checkDegree >= 45 && checkDegree < 135){
+                                return (x2 +100 - (20 * idxValue)); //Right
+                              }
+                              else{
+                                return (x2+10);
+                              }
+                            }catch(e){
+                              count += 1;
+                              var x2 = radius;
+                              return x2;
+                            }
+                          })
+      .attr("y2", function(d,i){
+        try{
+          var checkDegree =  document.getElementById(d.source).attributes.degree.nodeValue;
+          var y2 = document.getElementById(d.target).y.baseVal.value + radius;
+          var tragetName = document.getElementById(d.target).id;
+          var idxValue = getIndex[tragetName];
+
+							console.log("tragetName1 :",tragetName);
+							console.log("val1 :",idxValue);
+          					console.log("checkDegree1 :",checkDegree);
+
+          if(checkDegree >= 135 && checkDegree <= 225 ){
+                                return (y2 + 100); // Bottom
+                              }
+                              else if((checkDegree > 225 && checkDegree <= 305) || (checkDegree >= 45 && checkDegree < 135)) {
+                                return (y2 + 10 + 20 * idxValue) ; //left & right
+                              }
+                              else{
+                                return (y2);
+                              }
+                            }catch(e){
+                              count += 1;
+                              var y2 = radius;
+                              return y2;
+                            }
+                          });
+
+  //-----------------------Mouseover Interactions---------------------------------//
+  function mouseoverCircle(p) {
+    linesAttribute.selectAll("line")
+    .data(CircleEdges)
+    .style("stroke-width", function(d){
+      if (d.source == p.name) {
+        return "1.5";
+      }
+      else {
+        return "0.5";
+      }
+    })
+    .style("stroke", function(d){
+      if (d.source == p.name) {
+        // circleAttributes.selectAll('circle.node')
+        // .attr('r', function (p) {
+        //   if (d.source == p.name) {return 7}
+        //    else {return 5}
+        //  });
+         circleAttributes.selectAll('text')
+         .attr("font-size", function (q) {
+          if (d.source == q.name) {return "15px"}
+           else {return '10px'}
+         });
+        return "#e60000";
+      }
+      else {
+        return "#E0E0E0";
+      }
+    })
+  }
+  function mouseoverRows(p) {
+    d3.selectAll(".row text").classed("active", (d, i) => { return i == p.y; });
+    d3.selectAll(".column text").classed("active", (d, i) => { return i == p.x; });
+    tooltip.transition().duration(200).style("opacity", .9);
+
+
+    linesAttribute.selectAll("line")
+    .data(CircleEdges)
+    .style("stroke-width", function(d){
+      if ((d.target == nodes[p.y].name) || (d.target == nodes[p.x].name)) {
+        return "1.5";
+      }
+      else
+      {
+        return "0.2";
+      }
+    })
+    .style("stroke", function(d){
+      if ((d.target == nodes[p.y].name) || (d.target == nodes[p.x].name)) {
+        var tragetName = document.getElementById(d.target).id;
+        var idxValue = getIndex[tragetName];
+        return color[idxValue];
+      }
+      else{
+        return "#E0E0E0";
+      }
+    })
+    if(p.y == p.x){
+      tooltip.html(nodes[p.y].name + " Cancer</br>"+ (p.z/2) + " Genes")
+      .style("left", (d3.event.pageX + 3) + "px")
+      .style("top", (d3.event.pageY - 5) + "px");
+    }
+    else{
+     tooltip.html(nodes[p.y].name + " Cancer</br>" + nodes[p.x].name + " Cancer</br>" + p.z + " Common Genes")
+     .style("left", (d3.event.pageX + 30) + "px")
+     .style("top", (d3.event.pageY - 50) + "px");
+   }
+ }
+ function mouseoutRows() {
+   linesAttribute.selectAll("line")
+   .style("stroke-width", "0.6")
+   .style("stroke", function(d){
+    var tragetName = document.getElementById(d.target).id;
+    var idxValue = getIndex[tragetName];
+    return color[idxValue];
+   })
+   d3.selectAll('line').style("stroke-width", "0.6");
+   // d3.selectAll('circle.node').attr('r', 5);
+   d3.selectAll('text') .attr("font-size", "10px");
+   d3.selectAll("text").classed("active", false);
+   tooltip.transition().duration(500).style("opacity", 0);
+ }
+
+});
+</script>
+</div>
+</body>
+</html>
