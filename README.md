@@ -1,5 +1,7 @@
 # RadTrix
-A Visualization tool for Bi-Partite Network
+A Visualization tool for Bi-Partite Network developed using D3.js
+
+
 RadTrix is a composite of two visualizations in a single view, i.e., matrix visualization for smaller (D) set and circular/radial graph layout for the larger (N) set in a bipartite graph.  The layout follows the nesting composite visualization view design.
 
 Reduction in visual clutter is attained 
