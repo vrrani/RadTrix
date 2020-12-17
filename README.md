@@ -14,4 +14,4 @@ RadTrix is used for a case-study of the disease-gene association network, the di
 
 A short video of the tool is available - RadTrix.mp4
 
-The link for the RadTrix  layout hosted using gtihub -->  https://vrrani.github.io/RadTrix/Radtrix.html
+The link for the RadTrix  layout hosted using github -->  https://vrrani.github.io/RadTrix/Radtrix.html
